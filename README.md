@@ -53,7 +53,17 @@ A minimal, practical, and up-to-date guide replacing legacy 60-page slides and m
 - **VS Code**: With the _Salesforce Extension Pack_.
 - **Do you need Java locally?** Not for basic `sf` CLI commands. Java (JDK 11 or 17) is only required if running local Jenkins or the PMD engine inside Salesforce Code Analyzer.
 
-### Project Structure
+### Creating a Project From Scratch (vs Just Cloning)
+
+Cloning a Git repo is fine when onboarding to an existing team, but it shouldn't be your primary mental model for learning Salesforce DX. To truly understand the framework, you should know how to spin up a project from scratch:
+
+```bash
+# Generate a clean, official DX project structure
+sf project generate --name my-salesforce-project
+cd my-salesforce-project
+```
+
+This scaffolds the core project structure:
 
 ```
 salesforce-dx/
@@ -123,6 +133,21 @@ sf project retrieve start --target-org MyScratchOrg
 # 4. Open org in browser
 sf org open --target-org MyScratchOrg
 ```
+
+### The "Nothing to Deploy" Gotcha (How Source Tracking Works)
+
+A very common gotcha when deploying to a scratch org:
+
+1. **First Deploy**: You run `sf project deploy start --target-org MyScratchOrg`. Everything uploads cleanly, and Salesforce DX source tracking marks your local files and scratch org as synchronized.
+2. **Immediate Second Deploy**: If you run `sf project deploy start` again without editing anything, the CLI says **"No changes detected to deploy"** (nothing happens).
+3. **Why this happens**: Unlike a simple file copy or FTP, Salesforce DX tracks state. It only deploys what has changed since the last sync.
+4. **How to deploy again**:
+   - **Normal flow (Make a local change)**: Edit an existing file, or create a new one.
+     > 💡 **Golden Rule**: In Salesforce, every code file **must have its companion XML metadata file**! For example, if you create `MyClass.cls`, you must also create `MyClass.cls-meta.xml` right next to it. If you only create the `.cls` file without the `.cls-meta.xml`, Salesforce will throw an error and fail the deploy.
+   - **Force Deploy (Bypass source tracking)**: If you ever want to redeploy all files regardless of what source tracking thinks, target the source directory directly:
+     ```bash
+     sf project deploy start --source-dir force-app/main/default --ignore-conflicts
+     ```
 
 ---
 
