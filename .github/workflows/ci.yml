@@ -1,0 +1,99 @@
+name: Salesforce DX CI Pipeline
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  salesforce-ci:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+
+      - name: Install Local Node Dependencies
+        run: npm ci
+
+      - name: Run Linter
+        run: npm run lint
+
+      - name: Run LWC Jest Unit Tests
+        run: npm test
+
+      - name: Install Salesforce CLI
+        run: npm install --global --omit=dev @salesforce/cli
+
+      - name: Verify Salesforce CLI Version
+        run: sf --version
+
+      - name: Authenticate Dev Hub
+        id: auth
+        env:
+          # Method A (Fastest for GitHub Actions): SFDX Auth URL Secret
+          SFDX_AUTH_URL: ${{ secrets.SFDX_AUTH_URL }}
+          # Method B (Enterprise JWT Flow):
+          HUB_CLIENT_ID: ${{ secrets.HUB_CLIENT_ID }}
+          HUB_USERNAME: ${{ secrets.HUB_USERNAME }}
+          JWT_KEY: ${{ secrets.JWT_KEY }}
+        run: |
+          if [ -n "$SFDX_AUTH_URL" ]; then
+            echo "Authenticating via SFDX Auth URL..."
+            echo "$SFDX_AUTH_URL" > ./auth_url.txt
+            sf org login sfdx-url --sfdx-url-file ./auth_url.txt --alias DevHub --set-default-dev-hub
+            rm -f ./auth_url.txt
+            echo "has_auth=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$JWT_KEY" ] && [ -n "$HUB_CLIENT_ID" ] && [ -n "$HUB_USERNAME" ]; then
+            echo "Authenticating via JWT Flow..."
+            echo "$JWT_KEY" > ./server.key
+            sf org login jwt --client-id "$HUB_CLIENT_ID" --jwt-key-file ./server.key --username "$HUB_USERNAME" --alias DevHub --set-default-dev-hub
+            rm -f ./server.key
+            echo "has_auth=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Notice: No Salesforce Dev Hub secrets configured in GitHub Secrets."
+            echo "LWC tests and linting passed! Live scratch org steps will activate once secrets are added."
+            echo "has_auth=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create Scratch Org
+        if: steps.auth.outputs.has_auth == 'true'
+        run: |
+          sf org create scratch \
+            --target-dev-hub DevHub \
+            --definition-file config/project-scratch-def.json \
+            --alias ci_scratch_${{ github.run_id }} \
+            --duration-days 1 \
+            --wait 10 \
+            --set-default
+
+      - name: Deploy Metadata to Scratch Org
+        if: steps.auth.outputs.has_auth == 'true'
+        run: |
+          sf project deploy start \
+            --target-org ci_scratch_${{ github.run_id }} \
+            --wait 10
+
+      - name: Run Apex Tests & Check Coverage
+        if: steps.auth.outputs.has_auth == 'true'
+        run: |
+          sf apex run test \
+            --target-org ci_scratch_${{ github.run_id }} \
+            --test-level RunLocalTests \
+            --code-coverage \
+            --result-format human \
+            --wait 10
+
+      - name: Delete Scratch Org (Cleanup)
+        if: always() && steps.auth.outputs.has_auth == 'true'
+        run: |
+          sf org delete scratch \
+            --target-org ci_scratch_${{ github.run_id }} \
+            --no-prompt || true
