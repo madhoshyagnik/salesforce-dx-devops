@@ -1,3 +1,5 @@
+name: salesforce-dx-devops
+
 services:
   jenkins:
     build:

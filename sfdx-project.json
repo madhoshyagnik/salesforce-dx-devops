@@ -5,7 +5,7 @@
       "default": true
     }
   ],
-  "name": "salesforce-dx",
+  "name": "salesforce-dx-devops",
   "namespace": "",
   "sfdcLoginUrl": "https://login.salesforce.com",
   "sourceApiVersion": "67.0"

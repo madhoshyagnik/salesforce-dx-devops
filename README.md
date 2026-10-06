@@ -66,7 +66,7 @@ cd my-salesforce-project
 This scaffolds the core project structure:
 
 ```
-salesforce-dx/
+salesforce-dx-devops/
 ├── .github/workflows/ci.yml       # GitHub Actions CI workflow
 ├── docker-compose.yml             # Local Jenkins via Docker Compose
 ├── docker/Dockerfile.jenkins      # Jenkins image with sf CLI & Node preinstalled
@@ -241,7 +241,7 @@ The repository includes a ready-to-use Docker Compose configuration with a custo
 ### Spin Up Jenkins
 
 ```bash
-# From the salesforce-dx directory:
+# From the project root:
 docker compose up -d
 
 # Check container status
