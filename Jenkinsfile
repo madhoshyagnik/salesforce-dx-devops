@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'NodeJS 26'
+    }
+
     environment {
         // Dev Hub credentials configured in Jenkins Credentials Manager:
         // Option 1: JWT Flow (Recommended for Enterprise/Jenkins)
