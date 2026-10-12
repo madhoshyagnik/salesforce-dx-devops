@@ -26,6 +26,18 @@ pipeline {
             }
         }
 
+    stage('Install Salesforce CLI') {
+        steps {
+            sh '''
+                set -e
+                node --version
+                npm --version
+                npm install --global @salesforce/cli
+                sf --version
+            '''
+        }
+    }
+
         stage('Lint & Unit Tests') {
             steps {
                 echo '=== Running Local LWC Jest Unit Tests & Linting ==='
