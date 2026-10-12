@@ -305,8 +305,12 @@ CI systems cannot open interactive browser windows. Use one of two headless meth
    ```bash
    sf org display --target-org ProdOrg --verbose --json
    ```
-2. Copy the `sfdxAuthUrl` value and save it as secret `SFDX_AUTH_URL` in GitHub repository settings.
-3. In CI:
+   Note: This might prompt to show auth URL for scratch org, in that case, use below:
+   ```bash
+   sf org auth show-sfdx-auth-url --target-org ProdOrg
+   ```
+3. Copy the `sfdxAuthUrl` value and save it as secret `SFDX_AUTH_URL` in GitHub repository settings.
+4. In CI:
    ```bash
    echo "$SFDX_AUTH_URL" > auth.txt
    sf org login sfdx-url --sfdx-url-file auth.txt --alias DevHub --set-default-dev-hub
