@@ -1,3 +1,4 @@
+
 pipeline {
     agent any
 
@@ -6,17 +7,17 @@ pipeline {
     }
 
     environment {
-        // Dev Hub credentials configured in Jenkins Credentials Manager:
-        // Option 1: JWT Flow (Recommended for Enterprise/Jenkins)
-        //   - salesforce-jwt-key: Secret file (server.key)
-        //   - salesforce-connected-app-client-id: Secret text (Consumer Key)
-        //   - salesforce-devhub-username: Secret text (Dev Hub Admin Username)
+        // Dev Hub credentials
         JWT_KEY = credentials('salesforce-jwt-key')
         HUB_CLIENT_ID = credentials('salesforce-connected-app-client-id')
         HUB_USERNAME = credentials('salesforce-devhub-username')
 
-        // Scratch org alias scoped to current build
+        // Scratch org alias
         SCRATCH_ORG_ALIAS = "jenkins_build_${BUILD_NUMBER}"
+
+        // Salesforce scratch-org signup workaround for ECA / C-1016
+        SF_SCRATCH_SIGNUP_CONNECTED_APP = 'PlatformCLI'
+        SF_SCRATCH_SIGNUP_CALLBACK_URL = 'http://localhost:1717/OauthRedirect'
     }
 
     stages {
@@ -26,17 +27,17 @@ pipeline {
             }
         }
 
-    stage('Install Salesforce CLI') {
-        steps {
-            sh '''
-                set -e
-                node --version
-                npm --version
-                npm install --global @salesforce/cli
-                sf --version
-            '''
+        stage('Install Salesforce CLI') {
+            steps {
+                sh '''
+                    set -e
+                    node --version
+                    npm --version
+                    npm install --global @salesforce/cli
+                    sf --version
+                '''
+            }
         }
-    }
 
         stage('Lint & Unit Tests') {
             steps {
@@ -61,31 +62,19 @@ pipeline {
             }
         }
 
-
-
         stage('Create Ephemeral Scratch Org') {
             steps {
-                script {
-                    def scratchOrgAlias = "jenkins_build_${BUILD_NUMBER}"
-
-                    echo "=== Creating Scratch Org: ${scratchOrgAlias} ==="
-
-                    withEnv([
-                        'SF_SCRATCH_SIGNUP_CONNECTED_APP=PlatformCLI',
-                        'SF_SCRATCH_SIGNUP_CALLBACK_URL=http://localhost:1717/OauthRedirect'
-                    ]) {
-                        sh """
-                            set -e
-                            sf org create scratch \
-                                --target-dev-hub DevHub \
-                                --definition-file config/project-scratch-def.json \
-                                --alias ${scratchOrgAlias} \
-                                --duration-days 1 \
-                                --wait 10 \
-                                --set-default
-                        """
-                    }
-                }
+                echo "=== Creating Scratch Org: ${SCRATCH_ORG_ALIAS} ==="
+                sh '''
+                    set -e
+                    sf org create scratch \
+                        --target-dev-hub DevHub \
+                        --definition-file config/project-scratch-def.json \
+                        --alias "${SCRATCH_ORG_ALIAS}" \
+                        --duration-days 1 \
+                        --wait 10 \
+                        --set-default
+                '''
             }
         }
 
@@ -116,7 +105,8 @@ pipeline {
             }
             post {
                 always {
-                    junit allowEmptyResults: true, testResults: 'test-results/test-result-*.xml'
+                    junit allowEmptyResults: true,
+                        testResults: 'test-results/test-result-*.xml'
                 }
             }
         }
@@ -124,16 +114,18 @@ pipeline {
 
     post {
         always {
-            echo "=== Tearing Down Ephemeral Scratch Org ==="
+            echo '=== Tearing Down Ephemeral Scratch Org ==='
             sh '''
                 sf org delete scratch \
                     --target-org "${SCRATCH_ORG_ALIAS}" \
                     --no-prompt || true
             '''
         }
+
         success {
             echo '=== Salesforce DX Pipeline Completed Successfully! ==='
         }
+
         failure {
             echo '=== Salesforce DX Pipeline Failed! ==='
         }
