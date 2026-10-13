@@ -61,18 +61,31 @@ pipeline {
             }
         }
 
+
+
         stage('Create Ephemeral Scratch Org') {
             steps {
-                echo "=== Creating Scratch Org: ${SCRATCH_ORG_ALIAS} ==="
-                sh '''
-                    sf org create scratch \
-                        --target-dev-hub DevHub \
-                        --definition-file config/project-scratch-def.json \
-                        --alias "${SCRATCH_ORG_ALIAS}" \
-                        --duration-days 1 \
-                        --wait 10 \
-                        --set-default
-                '''
+                script {
+                    def scratchOrgAlias = "jenkins_build_${BUILD_NUMBER}"
+
+                    echo "=== Creating Scratch Org: ${scratchOrgAlias} ==="
+
+                    withEnv([
+                        'SF_SCRATCH_SIGNUP_CONNECTED_APP=PlatformCLI',
+                        'SF_SCRATCH_SIGNUP_CALLBACK_URL=http://localhost:1717/OauthRedirect'
+                    ]) {
+                        sh """
+                            set -e
+                            sf org create scratch \
+                                --target-dev-hub DevHub \
+                                --definition-file config/project-scratch-def.json \
+                                --alias ${scratchOrgAlias} \
+                                --duration-days 1 \
+                                --wait 10 \
+                                --set-default
+                        """
+                    }
+                }
             }
         }
 
