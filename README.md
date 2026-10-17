@@ -84,6 +84,9 @@ However, your free Developer Edition org has **Dev Hub**! When you enable Dev Hu
 
 ### Understanding the 4 Org Types
 
+> [!NOTE]
+> **"Org" vs "Sandbox"**: "Org" is the generic umbrella term for any Salesforce environment (Production, Sandboxes, Scratch Orgs, Dev Edition). A "Sandbox" is specifically a clone provisioned from a paid Production org.
+
 | Org Type        | What it is                              | Typical use                                   | Persistence           | Source Tracking ("Sync")                     |
 | :-------------- | :-------------------------------------- | :-------------------------------------------- | :-------------------- | :------------------------------------------- |
 | **Dev Hub**     | Management org with licensing power     | Authorizes CI and spawns scratch orgs         | Permanent             | No                                           |
@@ -105,6 +108,15 @@ In Salesforce DX, "sync" is called **Source Tracking**:
 - **Scratch Orgs**: Built for a single developer working on a single branch. Source tracking is enabled by default.
 - **Developer / Developer Pro Sandboxes**: Can have source tracking if enabled by an admin in Setup.
 - **Production & Full Sandboxes**: **Never supported.** Thousands of end users, automated integrations, and background jobs modify records and configurations constantly in Production. Salesforce cannot maintain a real-time bidirectional diff ledger with your local laptop. For Production, deployments are always explicit (via targeted directories or manifests).
+
+### Source-Driven (Scratch Orgs) vs Org-Driven (Sandboxes & Production)
+
+In standard cloud DevOps (Terraform, Docker, Kubernetes), Git is the absolute source of truth—if an environment is deleted, Git and IaC rebuild 100% of it from zero. In Salesforce, the reality is nuanced:
+
+- **Scratch Orgs are truly Source-Driven**: They start 100% empty from a JSON shape definition. They have no metadata until deployed from Git (`sf project deploy start`). If deleted, Git can reproduce an identical one in minutes.
+- **Production & Sandboxes are historically Org-Driven**: You cannot run `sf org create production` from Git—Production is contractually provisioned by Salesforce as a persistent multi-tenant database. Sandboxes are cloned from _Production_ (inheriting licenses, managed packages, and schema), not built from Git.
+- **The ClickOps Drift Problem**: Admins frequently configure fields, validation rules, or flows directly in the Production or Sandbox web UI without touching Git. This introduces **configuration drift**.
+- **The DevOps Mandate (Source-Governed)**: Persistent orgs only become "source-driven" when DevOps enforces strict discipline: locking down production UI permissions, gating changes through Git PRs, automating CI/CD deployments, and running drift detection to pull untracked metadata back into Git.
 
 ---
 
