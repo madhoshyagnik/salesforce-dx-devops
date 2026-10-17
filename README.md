@@ -255,6 +255,35 @@ docker compose ps
   ```
 - **Install Plugins**: Complete setup wizard and install **Git**, **Pipeline**, **Credentials Binding**, and **JUnit** plugins.
 
+### Redeployment on a New Machine
+
+Keep the following points in mind for a smooth redeployment on another computer:
+
+#### 1. Build and Run via Docker Compose
+
+Run Docker Compose directly from the repository root to ensure the custom image with `libatomic1`, Node.js, and `@salesforce/cli` is built:
+
+```bash
+docker compose up -d --build
+```
+
+> **Note**: Do not use the stock `jenkins/jenkins` base image directly without building from `docker/Dockerfile.jenkins`. Modern Salesforce CLI and Node.js require GCC atomic built-ins (`libatomic1`), which are baked into this repository's Dockerfile.
+
+#### 2. Jenkins UI & Plugin Prerequisites
+
+Because Jenkins data lives in a persistent Docker volume (`jenkins_home`), a fresh machine starts with an unconfigured Jenkins instance:
+
+1. **Required Plugins**: **Git**, **Pipeline**, **Credentials Binding**, **JUnit**, and **NodeJS** plugins.
+2. **NodeJS Tool Configuration**: The pipeline specifies `tools { nodejs 'NodeJS 26' }`. Navigate to **Manage Jenkins > Tools > NodeJS Installations** and configure an installation named `NodeJS 26` (with `@salesforce/cli` installed as a global npm package).
+
+#### 3. Dev Hub Credentials & Secrets (Not Committed to Git)
+
+For security, RSA keys and Connected App credentials are not stored in Git. On the new machine, configure these 3 credentials in **Manage Jenkins > Credentials**:
+
+- `salesforce-jwt-key`: Secret file containing your private RSA key (`server.key`).
+- `salesforce-connected-app-client-id`: Secret text containing the Connected App Consumer Key.
+- `salesforce-devhub-username`: Secret text containing your Dev Hub admin username.
+
 ---
 
 ## 8. CI/CD Pipelines: Jenkins & GitHub Actions
@@ -309,8 +338,8 @@ CI systems cannot open interactive browser windows. Use one of two headless meth
    ```bash
    sf org auth show-sfdx-auth-url --target-org ProdOrg
    ```
-3. Copy the `sfdxAuthUrl` value and save it as secret `SFDX_AUTH_URL` in GitHub repository settings.
-4. In CI:
+2. Copy the `sfdxAuthUrl` value and save it as secret `SFDX_AUTH_URL` in GitHub repository settings.
+3. In CI:
    ```bash
    echo "$SFDX_AUTH_URL" > auth.txt
    sf org login sfdx-url --sfdx-url-file auth.txt --alias DevHub --set-default-dev-hub
