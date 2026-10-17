@@ -86,53 +86,139 @@ salesforce-dx-devops/
 
 ### Authorize Dev Hub
 
+The Dev Hub is the org that Salesforce uses to create and manage scratch orgs. It is not the scratch org itself. Enable Dev Hub under **Setup > Dev Hub**, then authorize locally:
+
 ```bash
 # Interactive web login
-sf org login web --alias ProdOrg --set-default-dev-hub
+sf org login web --alias DevHub --set-default-dev-hub
 
 # Verify connected orgs
 sf org list --all
+
+# Set target Dev Hub globally (optional)
+sf config set target-dev-hub=DevHub
 ```
 
 ### Create a Scratch Org
 
+A scratch org is a temporary, configurable, and source-driven environment (default lifetime: 7 days, configurable 1–30 days):
+
 ```bash
 sf org create scratch \
-  --target-dev-hub ProdOrg \
+  --target-dev-hub DevHub \
   --definition-file config/project-scratch-def.json \
   --alias MyScratchOrg \
   --duration-days 7 \
   --set-default
 ```
 
-### Troubleshooting Common Scratch Org Errors
+#### A Minimal Definition File (`config/project-scratch-def.json`)
 
-- **`LIMIT_EXCEEDED`**: Dev Hub has reached maximum active scratch orgs. Delete inactive ones: `sf org delete scratch --target-org <alias> --no-prompt`.
-- **`ProblemDeployingSettings`**: Definition file contains obsolete settings (e.g., deprecated `enableSetPasswordInApi` in `settings`). Keep `project-scratch-def.json` minimal.
-- **`NamedOrgNotFoundError`**: The CLI does not recognize the alias locally. Run `sf org list --all` to inspect local auth records.
-- **Incomplete creation**: If creation times out or disconnects:
-  ```bash
-  sf org resume scratch --use-most-recent
-  ```
+```json
+{
+  "orgName": "Demo company",
+  "edition": "Developer",
+  "features": [],
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    }
+  }
+}
+```
+
+> 💡 **Keep definition files minimal**: Add a feature or setting only when your project specifically requires it.
+
+### Scratch Org Lifecycle & Troubleshooting
+
+A scratch-org creation command executes across 6 distinct stages:
+
+1. **Prepare request**: Validates local definition file and parameters.
+2. **Send request**: Submits the scratch-org request to the Dev Hub.
+3. **Wait for the org**: Waits while Salesforce spins up the org.
+4. **Authenticate the new org locally**: Exchanges tokens and stores auth metadata.
+5. **Deploy scratch-org settings**: Applies settings from the definition file.
+6. **Done**: Outputs username and marks org ready.
+
+#### If Creation Times Out or is Incomplete
+
+```bash
+# Resume by Request ID
+sf org resume scratch --job-id <REQUEST_ID>
+
+# Resume most recent request
+sf org resume scratch --use-most-recent
+```
+
+If the resume finishes successfully, you will see `Your scratch org is ready.`
+
+#### Errors & Actions
+
+| Error                            | Meaning / Action                                                                                                                                                  |
+| :------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`LIMIT_EXCEEDED`**             | Dev Hub has reached active scratch-org allocation. Delete unused ones (`sf org delete scratch --target-org <alias> --no-prompt`) or wait for expiration.          |
+| **`NamedOrgNotFoundError`**      | CLI has no local authorization record for the referenced org/alias. Check `sf org list --all`.                                                                    |
+| **`AuthInfoOverwriteError`**     | CLI already has auth data for that username. Avoid adding logins blindly; identify the existing record with `sf org list`.                                        |
+| **`ProblemDeployingSettings`**   | The scratch org exists, but a setting in the definition file is obsolete or invalid (e.g., deprecated `enableSetPasswordInApi`). Remove the setting, then resume. |
+| **`expired authorization code`** | Browser login code is short-lived. Start a fresh login flow; do not reuse an old code.                                                                            |
+
+#### Most Useful Inspection Commands
+
+```bash
+sf org list
+sf org list --all
+sf org display --target-org MyScratchOrg
+sf org open --target-org MyScratchOrg
+```
+
+> ⚠️ **Troubleshooting Rule**: Do not change the definition file, authentication, aliases, and org state all at once. Change one thing at a time, rerun the relevant command, and read the exact lifecycle stage that failed.
 
 ---
 
 ## 4. Source-Driven Development Workflow
 
+The legacy commands `force:source:push` and `force:source:pull` are replaced by the modern `sf project deploy/retrieve` family:
+
 ```bash
-# 1. Preview changes (no actual deploy/retrieve)
+# 1. Preview changes before applying (no actual deploy/retrieve)
 sf project deploy preview --target-org MyScratchOrg
 sf project retrieve preview --target-org MyScratchOrg
 
-# 2. Deploy local metadata to org (replaces old force:source:push)
+# 2. Deploy local metadata to org
 sf project deploy start --target-org MyScratchOrg
 
-# 3. Retrieve metadata changes made in org Setup (replaces old force:source:pull)
+# Deploy a specific directory only
+sf project deploy start --target-org MyScratchOrg --source-dir force-app/main/default/classes
+
+# 3. Retrieve metadata changes made in org Setup
 sf project retrieve start --target-org MyScratchOrg
+
+# Retrieve a specific metadata component
+sf project retrieve start --target-org MyScratchOrg --metadata ApexClass:MyApexClass
 
 # 4. Open org in browser
 sf org open --target-org MyScratchOrg
 ```
+
+### What Source Tracking Means
+
+Source tracking keeps a local record of what changed between your local project and an org:
+
+- It automatically detects additions, edits, and deletions.
+- It detects conflicts before overwrite.
+- **Support matrix**:
+  - **Scratch orgs**: Supported and enabled by default.
+  - **Developer & Developer Pro sandboxes**: Supported when enabled in Dev Hub Setup.
+  - **Production, Developer Edition, Partial Copy, and Full sandboxes**: Source tracking is **not** supported (use direct or manifest deploys).
+
+#### Turn Local Tracking On / Off
+
+```bash
+sf org enable tracking --target-org MyScratchOrg
+sf org disable tracking --target-org MyScratchOrg
+```
+
+> **Key Point**: You can always deploy to an org that does not support source tracking. You simply lose automated local change/conflict detection.
 
 ### The "Nothing to Deploy" Gotcha (How Source Tracking Works)
 
@@ -153,11 +239,13 @@ A very common gotcha when deploying to a scratch org:
 
 ## 5. Sandboxes (Modern CLI Approach)
 
+Replaces legacy `sfdx force:org:create -t sandbox` and UI setups with modern `sf org` commands.
+
 ```bash
-# Authorize production org that owns sandbox licenses
+# 1. Authorize production org that owns sandbox licenses
 sf org login web --alias ProdOrg
 
-# Create a Developer Sandbox
+# 2. Create a Developer Sandbox
 sf org create sandbox \
   --name Dev1 \
   --license-type Developer \
@@ -165,11 +253,31 @@ sf org create sandbox \
   --alias MyDevSandbox \
   --wait 30
 
-# Resume sandbox creation if queued
+# Or create via a Sandbox Definition File:
+sf org create sandbox \
+  --definition-file config/dev-sandbox-def.json \
+  --target-org ProdOrg \
+  --alias MyDevSandbox \
+  --set-default --wait 30
+
+# 3. Resume sandbox creation if queued (creation can exceed CLI wait time)
 sf org resume sandbox --job-id <JOB_ID>
 
-# Refresh or delete a sandbox
-sf org refresh sandbox --name Dev1 --target-org ProdOrg
+# 4. Open and inspect sandbox
+sf org list
+sf org display --target-org MyDevSandbox
+sf org open --target-org MyDevSandbox
+
+# 5. Clone an existing sandbox
+sf org create sandbox \
+  --name NewDev \
+  --source-sandbox-name ExistingSandbox \
+  --target-org ProdOrg \
+  --alias NewDev \
+  --set-default --wait 30
+
+# 6. Refresh or delete a sandbox
+sf org refresh sandbox --name Dev1 --target-org ProdOrg --wait 30
 sf org delete sandbox --target-org MyDevSandbox --no-prompt
 ```
 
@@ -195,48 +303,167 @@ npm run lint
 npm run prettier:verify
 ```
 
-### 2. Backend Apex Unit Tests (Platform)
+### 2. Backend Apex Unit Tests & Scratch-Org Users (Platform)
 
 Requires an active scratch org or sandbox:
 
 ```bash
-# Run tests via npm shortcut or sf CLI
-npm run test:apex
-
-# Direct CLI command with code coverage
+# Run local unit tests with code coverage
 sf apex run test \
   --target-org MyScratchOrg \
   --test-level RunLocalTests \
   --code-coverage \
   --result-format human \
   --wait 5
+
+# Run all tests in the org
+sf apex run test --target-org MyScratchOrg --test-level RunAllTestsInOrg
+
+# Create an additional scratch-org user (to test different profiles/permissions)
+sf org create user --target-org MyScratchOrg --set-alias testuser1
 ```
 
-### 3. Static Code Analysis (Modern Code Analyzer)
+### 3. Static Code Analysis (Salesforce Code Analyzer v5)
 
-Replaces manual Windows PMD 6.30 downloads:
+Replaces legacy manual Windows PMD 6.30 downloads and retired `sf scanner ...` workflows:
 
 ```bash
 # Run Salesforce Code Analyzer v5 across all rules
 sf code-analyzer run --workspace .
 ```
 
-### 4. Apex Replay Debugger
+- **Configuration**: Use `code-analyzer.yml` (or `.yaml`) for rulesets and engine customizations. Code Analyzer v4 was officially retired in August 2025; v5 is the current standard.
+- **What about old PMD XML rules?** Custom PMD rules are still supported, but configure them via `code-analyzer.yml` and invoke them with `sf code-analyzer rules` / `sf code-analyzer run`.
+- **Java requirement**: Java (JDK 11+) is only required because Code Analyzer's underlying PMD engine runs on Java, not because Salesforce CLI itself requires Java.
 
-1. In VS Code, set breakpoints or checkpoints (maximum of 5 checkpoints per session).
-2. Generate a trace flag: `sf apex tail log` or set debug log in Developer Console.
-3. Run code to trigger the log.
-4. Open the `.log` file in VS Code -> Right-click -> **Launch Apex Replay Debugger**.
+### 4. Apex Replay Debugger Deep Dive
+
+Apex Replay Debugger replays execution post-mortem from a recorded debug log. It is **free** and does not require the licensed, live Interactive Debugger.
+
+#### Key Debugging Concepts
+
+- **Debug Log**: The recorded sequence of Apex events generated when code executes. Replay Debugger navigates this log.
+- **Line Breakpoint**: A pause point in code where you want to step through execution.
+- **Checkpoint**: Captures a full snapshot of variable state and heap memory at a specific line (limit of 5 checkpoints at a time; expires after 30 minutes).
+- **Trace Flag / Debug Level**: Directs Salesforce on which events to record and how verbosely.
+
+#### Step-by-Step Workflow in VS Code
+
+1. Open the project in VS Code with the _Salesforce Extension Pack_ and ensure the target org is authorized.
+2. **Simple Unit Test Debugging**: Open the test class, set line breakpoints, open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`), and run:
+   `SFDX: Launch Apex Replay Debugger with Current File` (or right-click editor -> choose command). This shortcut sets trace flags, generates a fresh log, and starts debugging automatically.
+3. **Complex Triggers / Queueable Apex**:
+   - Set breakpoints in your `.cls` or `.trigger` file.
+   - For richer variable inspection, add up to 5 checkpoints and run `SFDX: Update Checkpoints in Org` from the Command Palette.
+   - Run `SFDX: Turn On Apex Debug Log for Replay Debugger` to enable trace flags.
+   - Reproduce the scenario in your org.
+   - Open the resulting log in VS Code and launch Replay Debugger (or run `SFDX: Launch Apex Replay Debugger with Last Log File`).
+4. **Step & Inspect**: Use Step Over, Step Into, and Continue to inspect the call stack, local variables, and heap dumps.
+
+#### Why Checkpoints Matter
+
+Ordinary log lines only print text strings. A checkpoint captures local/static variables and **trigger context variables** (e.g., `Trigger.new`, `Trigger.oldMap`) in a heap dump snapshot that is otherwise invisible in plain log text.
+
+#### Troubleshooting Replay Debugger
+
+| Problem                   | Cause / Solution                                                                                                                     |
+| :------------------------ | :----------------------------------------------------------------------------------------------------------------------------------- |
+| **No log appears**        | Trace flag expired or configured for a different user. Ensure trace flag matches the active running user.                            |
+| **Replay cannot start**   | Selected log is not an Apex log supported by Replay Debugger. Retrieve a fresh log.                                                  |
+| **Variables missing**     | Set checkpoints **before** reproducing the issue, upload them to the org (`SFDX: Update Checkpoints in Org`), then trigger the code. |
+| **Wrong code path**       | Local code does not match the code version deployed to the org that generated the log. Sync local files with org.                    |
+| **Interactive vs Replay** | Replay Debugger replays recorded logs (free). Interactive Debugger pauses live threads (requires paid licenses).                     |
 
 ---
 
-## 7. Local Jenkins Setup (Docker Compose)
+## 7. CLI Data Commands (Records vs Metadata)
+
+Salesforce DX CLI includes dedicated commands for working with **Salesforce data (records)** as opposed to metadata:
+
+### 1) Query Records with SOQL
+
+```bash
+# Basic SOQL query (human-readable table)
+sf data query --target-org MyScratchOrg --query "SELECT Id, Name FROM Account LIMIT 10"
+
+# Output to CSV or JSON file
+sf data query --target-org MyScratchOrg \
+  --query "SELECT Id, Name FROM Account LIMIT 100" \
+  --result-format csv \
+  --output-file accounts.csv
+
+# For queries returning over 10,000 records, use bulk export:
+sf data export bulk --target-org MyScratchOrg --query "SELECT Id, Name FROM Account"
+```
+
+### 2) Single-Record CRUD
+
+```bash
+# Create a record
+sf data create record --target-org MyScratchOrg --sobject Account --values "Name='Acme Demo'"
+
+# Get record by ID
+sf data get record --target-org MyScratchOrg --sobject Account --record-id <RECORD_ID>
+
+# Update a record
+sf data update record --target-org MyScratchOrg --sobject Account --record-id <RECORD_ID> --values "Phone='555-0100'"
+
+# Delete a record (destructive)
+sf data delete record --target-org MyScratchOrg --sobject Account --record-id <RECORD_ID>
+```
+
+### 3) Export and Import Related Records as JSON (sObject Tree)
+
+Used for small relational datasets (Accounts with Contacts, parent-child records up to 2,000 records):
+
+```bash
+# Export with plan file
+sf data export tree --target-org MyScratchOrg \
+  --query "SELECT Name, (SELECT FirstName, LastName, Email FROM Contacts) FROM Account LIMIT 5" \
+  --output-dir ./data-export \
+  --plan
+
+# Import using generated plan file
+sf data import tree --target-org MyScratchOrg --plan ./data-export/plan.json
+```
+
+### 4) CSV and Bulk API 2.0 (Larger Datasets)
+
+```bash
+# Bulk import from CSV
+sf data import bulk --target-org MyScratchOrg --sobject Account --file ./accounts.csv --wait 10
+
+# Bulk update (first column must contain Salesforce record ID)
+sf data update bulk --target-org MyScratchOrg --sobject Account --file ./account-updates.csv --wait 10
+
+# Bulk upsert (requires external ID field)
+sf data upsert bulk --target-org MyScratchOrg \
+  --sobject Account \
+  --file ./accounts-upsert.csv \
+  --external-id External_Account_ID__c \
+  --wait 10
+
+# Resume a queued bulk job if it takes longer than the wait period
+sf data import resume --job-id <JOB_ID>
+```
+
+### 5) SOQL vs SOSL
+
+- `sf data query`: Runs **SOQL** (structured SQL-like queries over known objects and fields).
+- `sf data search`: Runs **SOSL** (text-based search across multiple searchable objects).
+
+> 🔒 **Security Golden Rule**: Scratch orgs are disposable. Use synthetic or controlled mock data only. Never import sensitive production customer data into scratch orgs.
+
+---
+
+## 8. Local Jenkins Setup (Docker Compose)
 
 The repository includes a ready-to-use Docker Compose configuration with a custom image containing:
 
 - Jenkins LTS (JDK 17)
 - Node.js 20 LTS & npm
 - Salesforce CLI (`sf`) preinstalled globally
+- `libatomic1` preinstalled (required for Node.js / V8 runtime)
 
 ### Spin Up Jenkins
 
@@ -253,7 +480,7 @@ docker compose ps
   ```bash
   docker exec -it salesforce-jenkins cat /var/jenkins_home/secrets/initialAdminPassword
   ```
-- **Install Plugins**: Complete setup wizard and install **Git**, **Pipeline**, **Credentials Binding**, and **JUnit** plugins.
+- **Install Plugins**: Complete setup wizard and install **Git**, **Pipeline**, **Credentials Binding**, **JUnit**, and **NodeJS** plugins.
 
 ### Redeployment on a New Machine
 
@@ -286,7 +513,7 @@ For security, RSA keys and Connected App credentials are not stored in Git. On t
 
 ---
 
-## 8. CI/CD Pipelines: Jenkins & GitHub Actions
+## 9. CI/CD Pipelines: Jenkins & GitHub Actions
 
 Both pipelines can peacefully coexist in the same repository:
 
@@ -363,23 +590,75 @@ CI systems cannot open interactive browser windows. Use one of two headless meth
 
 ---
 
-## 9. Modern Command Cheat Sheet (sf vs legacy sfdx)
+## 10. End-to-End Lab & Modern Command Cheat Sheet
 
-| Task                   | Legacy Command (`sfdx`)             | Modern Command (`sf`)                     |
-| :--------------------- | :---------------------------------- | :---------------------------------------- |
-| **Check Version**      | `sfdx --version`                    | `sf --version`                            |
-| **List Orgs**          | `sfdx force:org:list`               | `sf org list --all`                       |
-| **Browser Login**      | `sfdx auth:web:login`               | `sf org login web`                        |
-| **JWT Headless Login** | `sfdx auth:jwt:grant`               | `sf org login jwt`                        |
-| **Auth URL Login**     | `sfdx auth:sfdxurl:store`           | `sf org login sfdx-url`                   |
-| **Create Project**     | `sfdx force:project:create`         | `sf project generate`                     |
-| **Create Scratch Org** | `sfdx force:org:create`             | `sf org create scratch`                   |
-| **Resume Scratch Org** | _(none/manual)_                     | `sf org resume scratch --use-most-recent` |
-| **Delete Scratch Org** | `sfdx force:org:delete`             | `sf org delete scratch --no-prompt`       |
-| **Deploy Source**      | `sfdx force:source:push`            | `sf project deploy start`                 |
-| **Retrieve Source**    | `sfdx force:source:pull`            | `sf project retrieve start`               |
-| **Deploy Preview**     | _(none)_                            | `sf project deploy preview`               |
-| **Run Apex Tests**     | `sfdx force:apex:test:run`          | `sf apex run test`                        |
-| **Create User**        | `sfdx force:user:create`            | `sf org create user`                      |
-| **Create Sandbox**     | `sfdx force:org:create -t sandbox`  | `sf org create sandbox`                   |
-| **Static Analysis**    | Standalone PMD / `sfdx scanner:run` | `sf code-analyzer run`                    |
+### Practice Lab: Do This Once From Start to Finish
+
+Run this end-to-end flow once to verify your local setup:
+
+```bash
+# 1. Authorize Dev Hub
+sf org login web --alias DevHub --set-default-dev-hub
+
+# 2. Create scratch org
+sf org create scratch \
+  --target-dev-hub DevHub \
+  --definition-file config/project-scratch-def.json \
+  --alias LabOrg \
+  --set-default
+
+# 3. If creation is incomplete / times out
+sf org resume scratch --use-most-recent
+
+# 4. Inspect & open
+sf org display --target-org LabOrg
+sf org open --target-org LabOrg
+
+# 5. Deploy local source metadata
+sf project deploy start --target-org LabOrg
+
+# 6. Run Apex tests
+sf apex run test --target-org LabOrg --test-level RunLocalTests
+
+# 7. Retrieve intended changes from org
+sf project retrieve start --target-org LabOrg
+
+# 8. Clean up & delete scratch org
+sf org delete scratch --target-org LabOrg --no-prompt
+```
+
+### Modern Command Cheat Sheet (`sf` vs Legacy `sfdx`)
+
+| Task                          | Legacy Command (`sfdx`)             | Modern Command (`sf`)                            |
+| :---------------------------- | :---------------------------------- | :----------------------------------------------- |
+| **Check Version**             | `sfdx --version`                    | `sf --version`                                   |
+| **List Orgs**                 | `sfdx force:org:list`               | `sf org list` / `sf org list --all`              |
+| **Browser Login**             | `sfdx auth:web:login`               | `sf org login web`                               |
+| **JWT Headless Login**        | `sfdx auth:jwt:grant`               | `sf org login jwt`                               |
+| **Auth URL Login**            | `sfdx auth:sfdxurl:store`           | `sf org login sfdx-url`                          |
+| **Create Project**            | `sfdx force:project:create`         | `sf project generate --name <name>`              |
+| **Create Scratch Org**        | `sfdx force:org:create`             | `sf org create scratch`                          |
+| **Resume Scratch Creation**   | _(none/manual)_                     | `sf org resume scratch --job-id <id>`            |
+| **Open Org**                  | `sfdx force:org:open`               | `sf org open --target-org <alias>`               |
+| **Deploy Source**             | `sfdx force:source:push`            | `sf project deploy start`                        |
+| **Retrieve Source**           | `sfdx force:source:pull`            | `sf project retrieve start`                      |
+| **Preview Deploy / Retrieve** | _(none)_                            | `sf project deploy preview` / `retrieve preview` |
+| **Run Apex Tests**            | `sfdx force:apex:test:run`          | `sf apex run test`                               |
+| **Create Scratch User**       | `sfdx force:user:create`            | `sf org create user`                             |
+| **Delete Scratch Org**        | `sfdx force:org:delete`             | `sf org delete scratch --no-prompt`              |
+| **Create Sandbox**            | `sfdx force:org:create -t sandbox`  | `sf org create sandbox`                          |
+| **Resume Sandbox**            | _(none/manual)_                     | `sf org resume sandbox`                          |
+| **Static Analysis**           | Standalone PMD / `sfdx scanner:run` | `sf code-analyzer run`                           |
+| **Query Records**             | `sfdx force:data:soql:query`        | `sf data query`                                  |
+| **CRUD Records**              | `sfdx force:data:record:*`          | `sf data create/get/update/delete record`        |
+| **Tree Export / Import**      | `sfdx force:data:tree:*`            | `sf data export/import tree`                     |
+| **Bulk API 2.0 Data**         | `sfdx force:data:bulk:*`            | `sf data import/update/upsert bulk`              |
+
+> 📌 **Key takeaway**: Ignore old `sfdx force:*`, `auth:web:login`, `force:auth:jwt:grant`, `force:source:push/pull`, standalone PMD 6.30, Jenkins click-through, and `enableSetPasswordInApi` examples. Use the modern `sf` workflow in this guide.
+>
+> **Official References**:
+>
+> - [Create Scratch Orgs](https://developer.salesforce.com/docs/platform/sfdx-dev/guide/sfdx-dev-scratch-orgs-create.html)
+> - [Salesforce CLI Reference](https://developer.salesforce.com/docs/platform/salesforce-cli-reference)
+> - [Salesforce Code Analyzer v5](https://developer.salesforce.com/docs/platform/salesforce-code-analyzer)
+> - [Salesforce CLI Data Commands](https://developer.salesforce.com/docs/platform/salesforce-cli-reference/guide/cli_reference_data.html)
