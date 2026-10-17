@@ -1,10 +1,34 @@
 # Salesforce DevOps with Salesforce DX (Modern Guide)
 
-A minimal, practical, and up-to-date guide replacing legacy 60-page slides and multi-hour video courses. Covers modern Salesforce CLI (`sf`), source-driven development, scratch orgs, sandboxes, local LWC testing, Apex testing, local Jenkins with Docker Compose, and CI/CD pipelines.
+A practical, grounded guide for DevOps engineers working with Salesforce. Covers modern Salesforce CLI (`sf`), source-driven development, metadata vs data, scratch orgs, sandboxes, local LWC testing, Apex testing, local Jenkins with Docker Compose, and headless CI/CD pipelines.
 
 ---
 
-## 1. The Core Mental Model
+## 1. The DevOps Engineer's Mental Model: Why Does This Exist & What Is Your Role?
+
+If you come from a standard cloud-native background (AWS, GCP, Kubernetes, Terraform, Docker, Python, Go), Salesforce often feels alien and confusing at first. Here is the plain-English mental model.
+
+### Why haven't you encountered Salesforce in traditional DevOps?
+
+In tech startups and consumer SaaS, teams build custom applications from scratch: custom backend APIs (Node/Python/Go), custom database schemas in PostgreSQL, and custom auth.
+
+In large enterprises (banks, healthcare, telecom, insurance, retail), companies do not build their core CRM, billing, and customer workflows from scratch. They run on **Salesforce** — a multi-tenant Platform-as-a-Service (PaaS) and Software-as-a-Service (SaaS).
+
+### The Problem: The Legacy "ClickOps" Era
+
+Historically, Salesforce development was purely "ClickOps":
+
+- Admins and developers logged directly into a shared browser sandbox or production org.
+- They created database tables, added fields, configured permissions, and wrote triggers **by clicking buttons in the Salesforce web UI**.
+- **There was no Git, no pull requests, no CI/CD, and no automated testing.** If two developers modified the same screen, they silently overwrote each other's work. Deployments were done by manually clicking checkboxes in "Change Sets" like moving files in 1998.
+
+### What is Salesforce DX (Developer Experience)?
+
+Salesforce introduced **Salesforce DX (SFDX)** to bring Salesforce into modern software engineering:
+
+1. **Git is the Single Source of Truth**: Changes are tracked as code files in a Git repository, not trapped inside a remote Salesforce database.
+2. **Local Development**: Developers write code locally in VS Code instead of a browser text area.
+3. **Automated CI/CD**: Deployments, testing, and validations are automated via Jenkins or GitHub Actions.
 
 ```
                     ┌─────────────────────────┐
@@ -23,27 +47,68 @@ A minimal, practical, and up-to-date guide replacing legacy 60-page slides and m
              └────────────────┘     └────────────────┘
 ```
 
-- **Git vs Salesforce DX**: Git is your version control system (commits, branches, pull requests). Salesforce DX is **not** version control; it is the tooling and metadata format that enables source-driven development, allowing Git to serve as the single source of truth instead of an org.
-- **Frontend Layers**: Modern development centers on **Lightning Web Components (LWC)** (standard web components, shadow DOM, Jest). Older stacks like Aura components and Visualforce are legacy.
-- **The 4 Org Types**:
-  | Org Type                     | Purpose                                                    | Persistence           | Source Tracking                             |
-  | :--------------------------- | :--------------------------------------------------------- | :-------------------- | :------------------------------------------ |
-  | **Dev Hub**                  | Management org that creates and tracks scratch orgs        | Persistent            | No                                          |
-  | **Scratch Org**              | Disposable, empty sandbox for single feature branches & CI | Temporary (1–30 days) | **Yes** (Default)                           |
-  | **Sandbox**                  | Replica of production for staging, integration, UAT        | Persistent            | Supported only for Dev/DevPro if enabled    |
-  | **Developer Edition / Prod** | Personal dev org or live production environment            | Persistent            | **No** (Deploys via manifest or source dir) |
+---
 
-### Source Tracking vs Git Tracking
+## 2. Metadata vs Data: The Concept That Explains Everything
 
-- **Git** tracks diffs between commits on your file system.
-- **Source Tracking** is an internal Salesforce feature that monitors diffs between your **local files** and the **metadata inside an org**.
-- Scratch orgs track changes automatically (`sf project deploy/retrieve` detects what changed).
-- Sandboxes only support source tracking if enabled under **Setup > Dev Hub > Enable Source Tracking in Developer and Developer Pro Sandboxes**.
-- Free Developer Edition orgs and Production **never** support source tracking. For these, use manifest-based or direct deploys (`sf project deploy start --manifest ...`).
+This is the single most important concept in Salesforce that upstream tutorials fail to explain clearly:
+
+| Concept      | What It Is                                                                                                              | Examples in Salesforce                                                                                                                                                  | Stored in Git?                                               |
+| :----------- | :---------------------------------------------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :----------------------------------------------------------- |
+| **METADATA** | The **structure, schema, logic, and configuration** of the application. Everything that defines _how the system works_. | Database tables (`CustomObject`), columns (`CustomField`), UI layouts, Validation Rules, Permissions, Apex classes (`.cls`), Lightning Web Components (`.js`, `.html`). | **YES** (Stored as XML, JSON, and JS in `force-app/`)        |
+| **DATA**     | The **actual business records and rows** created by end users.                                                          | "Acme Corp" (Account record), "John Doe" (Contact record), "Invoice #1042 for $5,000".                                                                                  | **NO** (Lives in the org's database; never committed to Git) |
+
+> 💡 **Key Takeaway**: When you run CI/CD, deploy code, or commit to Git, **you are deploying METADATA**. Your local `force-app/main/default/` folder is simply the local file representation of that metadata extracted from Salesforce.
 
 ---
 
-## 2. Prerequisites & Project Setup
+## 3. What Does a DevOps Engineer Actually Do for Salesforce?
+
+As a DevOps engineer, you are **not** writing business Apex code or designing UI buttons. You build and maintain the **engineering delivery pipeline**:
+
+1. **Automated Ephemeral CI Environments**: When a developer opens a Pull Request, your pipeline (Jenkins or GitHub Actions) automatically spins up a clean, disposable **Scratch Org**, deploys the branch metadata, executes unit tests, checks code coverage, and destroys the scratch org when done.
+2. **Quality Gates & Static Analysis**: Enforcing automated linting, LWC Jest tests, Apex unit tests, and Salesforce Code Analyzer (PMD / security rules) before any code can merge.
+3. **Headless Authentication**: Setting up non-interactive JWT Bearer OAuth flows with RSA certificates so automated CI agents can authenticate to Salesforce without human browser logins.
+4. **Environment Promotion & Release Management**: Promoting metadata cleanly across the multi-tier enterprise pipeline:
+   `Feature Branch (Scratch Org)` → `develop (Dev Sandbox)` → `release (UAT/Staging Sandbox)` → `main (Production)`.
+
+---
+
+## 4. The Org Landscape: Free Developer Account vs Sandboxes vs Scratch Orgs
+
+### Does your free Developer Edition account have Sandboxes?
+
+**No.** Free Developer Edition accounts (from `developer.salesforce.com`) do **not** include sandboxes. Sandboxes are only provided with paid enterprise contracts.
+
+However, your free Developer Edition org has **Dev Hub**! When you enable Dev Hub under **Setup > Dev Hub**, your free account can create disposable **Scratch Orgs** (typically 3 active scratch orgs simultaneously).
+
+### Understanding the 4 Org Types
+
+| Org Type        | What it is                              | Typical use                                   | Persistence           | Source Tracking ("Sync")                     |
+| :-------------- | :-------------------------------------- | :-------------------------------------------- | :-------------------- | :------------------------------------------- |
+| **Dev Hub**     | Management org with licensing power     | Authorizes CI and spawns scratch orgs         | Permanent             | No                                           |
+| **Scratch Org** | Disposable, empty org spun up via CLI   | Feature development, PR testing, CI pipelines | Ephemeral (1–30 days) | **Yes (Default)**                            |
+| **Sandbox**     | Replica of a paid production org        | Integration testing, staging, client UAT      | Permanent             | Supported **only** for Dev/DevPro if enabled |
+| **Production**  | Live system where real business happens | End-user operations and final deployments     | Permanent             | **Never supported**                          |
+
+### What is "Source Tracking" (The Sync Engine)?
+
+In Salesforce DX, "sync" is called **Source Tracking**:
+
+- It is a bidirectional diff engine that tracks changes between your **local Git repository** and the **remote Salesforce org**.
+- If you edit a file locally, `sf project deploy start` deploys only that file.
+- If an admin edits a field in the org UI, `sf project retrieve start` pulls down only that change into your local Git repo.
+- If both changed, it flags a conflict before overwriting.
+
+#### Why isn't Source Tracking available in Production or Partial/Full Sandboxes?
+
+- **Scratch Orgs**: Built for a single developer working on a single branch. Source tracking is enabled by default.
+- **Developer / Developer Pro Sandboxes**: Can have source tracking if enabled by an admin in Setup.
+- **Production & Full Sandboxes**: **Never supported.** Thousands of end users, automated integrations, and background jobs modify records and configurations constantly in Production. Salesforce cannot maintain a real-time bidirectional diff ledger with your local laptop. For Production, deployments are always explicit (via targeted directories or manifests).
+
+---
+
+## 5. Prerequisites & Project Setup
 
 - **Salesforce CLI**: Modern CLI (`sf`) is required. Legacy `sfdx` commands are deprecated.
   ```bash
@@ -82,7 +147,7 @@ salesforce-dx-devops/
 
 ---
 
-## 3. Dev Hub & Scratch Org Management
+## 6. Dev Hub & Scratch Org Management
 
 ### Authorize Dev Hub
 
@@ -175,7 +240,7 @@ sf org open --target-org MyScratchOrg
 
 ---
 
-## 4. Source-Driven Development Workflow
+## 7. Source-Driven Development Workflow
 
 The legacy commands `force:source:push` and `force:source:pull` are replaced by the modern `sf project deploy/retrieve` family:
 
@@ -237,7 +302,7 @@ A very common gotcha when deploying to a scratch org:
 
 ---
 
-## 5. Sandboxes (Modern CLI Approach)
+## 8. Sandboxes (Modern CLI Approach)
 
 Replaces legacy `sfdx force:org:create -t sandbox` and UI setups with modern `sf org` commands.
 
@@ -283,7 +348,7 @@ sf org delete sandbox --target-org MyDevSandbox --no-prompt
 
 ---
 
-## 6. Testing & Quality Gates
+## 9. Testing, Debugging & Quality Gates
 
 This project contains both backend (Apex) and frontend (LWC) unit tests:
 
@@ -376,7 +441,7 @@ Ordinary log lines only print text strings. A checkpoint captures local/static v
 
 ---
 
-## 7. CLI Data Commands (Records vs Metadata)
+## 10. CLI Data Commands (Records vs Metadata)
 
 Salesforce DX CLI includes dedicated commands for working with **Salesforce data (records)** as opposed to metadata:
 
@@ -456,7 +521,7 @@ sf data import resume --job-id <JOB_ID>
 
 ---
 
-## 8. Local Jenkins Setup (Docker Compose)
+## 11. Local Jenkins Setup (Docker Compose)
 
 The repository includes a ready-to-use Docker Compose configuration with a custom image containing:
 
@@ -513,7 +578,7 @@ For security, RSA keys and Connected App credentials are not stored in Git. On t
 
 ---
 
-## 9. CI/CD Pipelines: Jenkins & GitHub Actions
+## 12. CI/CD Pipelines: Jenkins & GitHub Actions
 
 Both pipelines can peacefully coexist in the same repository:
 
@@ -590,7 +655,7 @@ CI systems cannot open interactive browser windows. Use one of two headless meth
 
 ---
 
-## 10. End-to-End Lab & Modern Command Cheat Sheet
+## 13. End-to-End Lab & Modern Command Cheat Sheet
 
 ### Practice Lab: Do This Once From Start to Finish
 
