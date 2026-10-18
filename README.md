@@ -231,13 +231,24 @@ If the resume finishes successfully, you will see `Your scratch org is ready.`
 
 #### Errors & Actions
 
-| Error                            | Meaning / Action                                                                                                                                                                                                 |
-| :------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`LIMIT_EXCEEDED`**             | Dev Hub has reached active scratch-org allocation. Delete unused ones (`sf org delete scratch --target-org <alias> --no-prompt`) or wait for expiration.                                                         |
-| **`NamedOrgNotFoundError`**      | CLI has no local authorization record for the referenced org/alias. Check `sf org list --all`.                                                                                                                   |
-| **`AuthInfoOverwriteError`**     | CLI already has auth data for that username. Avoid adding logins blindly; identify the existing record with `sf org list`.                                                                                       |
-| **`ProblemDeployingSettings`**   | A setting in the definition file is obsolete or invalid (e.g., placing `enableSetPasswordInApi` under `"settings"` instead of `"features"`). Move it to `"features"` or remove the invalid setting, then resume. |
-| **`expired authorization code`** | Browser login code is short-lived. Start a fresh login flow; do not reuse an old code.                                                                                                                           |
+| Error                            | Meaning / Action                                                                                                                                                                                                                                |
+| :------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`LIMIT_EXCEEDED`**             | Dev Hub reached its allocation (active scratch orgs or daily signups). Delete unused ones (`sf org delete scratch --target-org <alias> --no-prompt`). If daily signups are exhausted, deploy directly to main Dev Hub org (see fallback below). |
+| **`NamedOrgNotFoundError`**      | CLI has no local authorization record for the referenced org/alias. Check `sf org list --all`.                                                                                                                                                  |
+| **`AuthInfoOverwriteError`**     | CLI already has auth data for that username. Avoid adding logins blindly; identify the existing record with `sf org list`.                                                                                                                      |
+| **`ProblemDeployingSettings`**   | A setting in the definition file is obsolete or invalid (e.g., placing `enableSetPasswordInApi` under `"settings"` instead of `"features"`). Move it to `"features"` or remove the invalid setting, then resume.                                |
+| **`expired authorization code`** | Browser login code is short-lived. Start a fresh login flow; do not reuse an old code.                                                                                                                                                          |
+
+> 💡 **Reached Daily Scratch Org Limit? Use Your Main Dev Org Directly**:
+> Free Developer Edition orgs allow max 3 active scratch orgs and **6 signups per rolling 24-hour window**. If CI runs exhaust your daily quota, switch target to your persistent Dev Hub org and continue developing without delay:
+>
+> ```bash
+> # 1. Set default target org to your main developer account
+> sf config set target-org=<username-or-alias>
+>
+> # 2. Deploy your code directly
+> sf project deploy start --source-dir force-app/main/default/classes
+> ```
 
 #### Most Useful Inspection Commands
 
@@ -449,14 +460,13 @@ Apex Replay Debugger replays execution post-mortem from a recorded debug log. It
 
 - **Debug Log**: The recorded sequence of Apex events generated when code executes. Replay Debugger navigates this log.
 - **Line Breakpoint**: A pause marker (red dot in VS Code) telling the replay debugger where to freeze playback so you can inspect variables and step through logic line-by-line.
-- **Checkpoint**: Captures a full snapshot of variable state and heap memory at a specific line (limit of 5 checkpoints at a time; expires after 30 minutes).
+- **Checkpoint**: Captures a full snapshot of variable state and server heap memory (RAM) at a specific line (inspecting complex nested objects and trigger context like `Trigger.new` / `Trigger.oldMap`). Set on a line via `SFDX: Toggle Checkpoint`, then **upload to Salesforce** via `SFDX: Update Checkpoints in Org` before running code (limit 5 active; expires after 30 minutes).
 - **Trace Flag / Debug Level**: Directs Salesforce on which events to record and how verbosely.
 
 #### Step-by-Step Workflow in VS Code
 
 1. Open the project in VS Code with the _Salesforce Extension Pack_ and ensure the target org is authorized.
-2. **Simple Unit Test Debugging**: Open the test class, set line breakpoints, open Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`), and run:
-   `SFDX: Launch Apex Replay Debugger with Current File` (or right-click editor -> choose command). This shortcut sets trace flags, generates a fresh log, and starts debugging automatically.
+2. **Simple Unit Test Debugging**: Open the test class (e.g., `HelloWorldTest.cls`), set line breakpoints, and click the **`Debug Test`** CodeLens button directly above the test method (or run `SFDX: Launch Apex Replay Debugger with Selected File`). VS Code automatically sets trace flags, runs the test in your org, downloads the log, and launches debugging.
 3. **Complex Triggers / Queueable Apex**:
    - Set breakpoints in your `.cls` or `.trigger` file.
    - For richer variable inspection, add up to 5 checkpoints and run `SFDX: Update Checkpoints in Org` from the Command Palette.
