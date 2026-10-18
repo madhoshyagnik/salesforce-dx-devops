@@ -195,7 +195,7 @@ sf org create scratch \
 {
   "orgName": "Demo company",
   "edition": "Developer",
-  "features": [],
+  "features": ["EnableSetPasswordInApi"],
   "settings": {
     "lightningExperienceSettings": {
       "enableS1DesktopEnabled": true
@@ -204,7 +204,7 @@ sf org create scratch \
 }
 ```
 
-> 💡 **Keep definition files minimal**: Add a feature or setting only when your project specifically requires it.
+> 💡 **Features vs Settings**: `"EnableSetPasswordInApi"` is fully supported in the `"features"` array (enabling CLI commands like `sf org generate password` without knowing the old password). However, placing `enableSetPasswordInApi` under the `"settings"` block causes a `ProblemDeployingSettings` error in modern API versions.
 
 ### Scratch Org Lifecycle & Troubleshooting
 
@@ -231,13 +231,13 @@ If the resume finishes successfully, you will see `Your scratch org is ready.`
 
 #### Errors & Actions
 
-| Error                            | Meaning / Action                                                                                                                                                  |
-| :------------------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **`LIMIT_EXCEEDED`**             | Dev Hub has reached active scratch-org allocation. Delete unused ones (`sf org delete scratch --target-org <alias> --no-prompt`) or wait for expiration.          |
-| **`NamedOrgNotFoundError`**      | CLI has no local authorization record for the referenced org/alias. Check `sf org list --all`.                                                                    |
-| **`AuthInfoOverwriteError`**     | CLI already has auth data for that username. Avoid adding logins blindly; identify the existing record with `sf org list`.                                        |
-| **`ProblemDeployingSettings`**   | The scratch org exists, but a setting in the definition file is obsolete or invalid (e.g., deprecated `enableSetPasswordInApi`). Remove the setting, then resume. |
-| **`expired authorization code`** | Browser login code is short-lived. Start a fresh login flow; do not reuse an old code.                                                                            |
+| Error                            | Meaning / Action                                                                                                                                                                                                 |
+| :------------------------------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`LIMIT_EXCEEDED`**             | Dev Hub has reached active scratch-org allocation. Delete unused ones (`sf org delete scratch --target-org <alias> --no-prompt`) or wait for expiration.                                                         |
+| **`NamedOrgNotFoundError`**      | CLI has no local authorization record for the referenced org/alias. Check `sf org list --all`.                                                                                                                   |
+| **`AuthInfoOverwriteError`**     | CLI already has auth data for that username. Avoid adding logins blindly; identify the existing record with `sf org list`.                                                                                       |
+| **`ProblemDeployingSettings`**   | A setting in the definition file is obsolete or invalid (e.g., placing `enableSetPasswordInApi` under `"settings"` instead of `"features"`). Move it to `"features"` or remove the invalid setting, then resume. |
+| **`expired authorization code`** | Browser login code is short-lived. Start a fresh login flow; do not reuse an old code.                                                                                                                           |
 
 #### Most Useful Inspection Commands
 
@@ -744,7 +744,7 @@ sf org delete scratch --target-org LabOrg --no-prompt
 | **Tree Export / Import**      | `sfdx force:data:tree:*`            | `sf data export/import tree`                     |
 | **Bulk API 2.0 Data**         | `sfdx force:data:bulk:*`            | `sf data import/update/upsert bulk`              |
 
-> 📌 **Key takeaway**: Ignore old `sfdx force:*`, `auth:web:login`, `force:auth:jwt:grant`, `force:source:push/pull`, standalone PMD 6.30, Jenkins click-through, and `enableSetPasswordInApi` examples. Use the modern `sf` workflow in this guide.
+> 📌 **Key takeaway**: Ignore old `sfdx force:*`, `auth:web:login`, `force:auth:jwt:grant`, `force:source:push/pull`, standalone PMD 6.30, Jenkins click-through, and legacy `settings` blocks (e.g., `enableSetPasswordInApi` belongs in `"features"`, not `"settings"`). Use the modern `sf` workflow in this guide.
 >
 > **Official References**:
 >
