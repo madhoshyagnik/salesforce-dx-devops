@@ -588,6 +588,19 @@ For security, RSA keys and Connected App credentials are not stored in Git. On t
 - `salesforce-connected-app-client-id`: Secret text containing the Connected App Consumer Key.
 - `salesforce-devhub-username`: Secret text containing your Dev Hub admin username.
 
+#### 4. GitHub Webhook Configuration (Automatic Triggers on Push)
+
+To trigger the Jenkins pipeline automatically on `git push`:
+
+1. **Expose Local Jenkins** (if running locally): GitHub needs a public URL. Tunnel port 8080 (e.g., `ngrok http 8080` or Cloudflare Tunnel).
+2. **Enable Webhook in Jenkins**: In your Pipeline job configuration under **Build Triggers**, check **"GitHub hook trigger for GITScm polling"**.
+3. **Add Webhook in GitHub**:
+   - Go to your repository: **Settings > Webhooks > Add webhook**.
+   - **Payload URL**: `https://<YOUR-JENKINS-HOST>/github-webhook/` _(the trailing slash is mandatory)_.
+   - **Content type**: `application/json`.
+   - **Which events**: Select **Just the push event**.
+4. **Verify**: Test by pushing an empty commit (`git commit --allow-empty -m "ci: webhook test" && git push origin main`) and check that a new build starts under **Build History**.
+
 ---
 
 ## 12. CI/CD Pipelines: Jenkins & GitHub Actions
