@@ -448,7 +448,7 @@ Apex Replay Debugger replays execution post-mortem from a recorded debug log. It
 #### Key Debugging Concepts
 
 - **Debug Log**: The recorded sequence of Apex events generated when code executes. Replay Debugger navigates this log.
-- **Line Breakpoint**: A pause point in code where you want to step through execution.
+- **Line Breakpoint**: A pause marker (red dot in VS Code) telling the replay debugger where to freeze playback so you can inspect variables and step through logic line-by-line.
 - **Checkpoint**: Captures a full snapshot of variable state and heap memory at a specific line (limit of 5 checkpoints at a time; expires after 30 minutes).
 - **Trace Flag / Debug Level**: Directs Salesforce on which events to record and how verbosely.
 
