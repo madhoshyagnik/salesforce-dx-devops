@@ -318,6 +318,9 @@ A very common gotcha when deploying to a scratch org:
 
 Replaces legacy `sfdx force:org:create -t sandbox` and UI setups with modern `sf org` commands.
 
+> [!WARNING]
+> **Requires Paid Production Org with Sandbox Licenses**: Sandboxes cannot be created from a free Developer Edition org. Running `sf org create sandbox` against a Developer Edition account fails with **`Error (1): The requested resource does not exist`** because Developer Edition orgs lack the `SandboxInfo` Tooling API and sandbox licenses entirely. For Developer Edition accounts, use disposable **Scratch Orgs** (`sf org create scratch`).
+
 ```bash
 # 1. Authorize production org that owns sandbox licenses
 sf org login web --alias ProdOrg
