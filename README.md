@@ -361,6 +361,17 @@ sf org refresh sandbox --name Dev1 --target-org ProdOrg --wait 30
 sf org delete sandbox --target-org MyDevSandbox --no-prompt
 ```
 
+> 💡 **Why Refresh a Sandbox?**
+> Over weeks or months of development, a sandbox becomes **stale**:
+>
+> - Developers introduce temporary configuration changes or experimental test code.
+> - Meanwhile, Production receives regular releases, bugfixes, and new custom fields.
+> - The sandbox drifts and is no longer an accurate representation of Production.
+>
+> Running `sf org refresh sandbox` tells Salesforce: _"Take the current state of `ProdOrg` (Production) right now and overwrite `Dev1` so it is an exact mirror of Production again."_
+>
+> ⚠️ **Destructive Action**: Activating a refreshed sandbox wipes out all uncommitted metadata and test records previously in that sandbox, and requires re-authenticating the CLI.
+
 ---
 
 ## 9. Testing, Debugging & Quality Gates
