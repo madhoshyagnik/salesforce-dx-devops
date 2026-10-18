@@ -372,6 +372,20 @@ sf org delete sandbox --target-org MyDevSandbox --no-prompt
 >
 > ⚠️ **Destructive Action**: Activating a refreshed sandbox wipes out all uncommitted metadata and test records previously in that sandbox, and requires re-authenticating the CLI.
 
+#### Vendor Refresh Cooldowns & CI/CD Implications
+
+Salesforce enforces strict cooldown periods between sandbox refreshes. This limitation is the primary architectural reason why CI/CD pipelines rely on **Scratch Orgs** rather than Sandboxes:
+
+| Environment Tier  | Data Copied               | Refresh Cooldown          | DevOps Use Case                                    |
+| :---------------- | :------------------------ | :------------------------ | :------------------------------------------------- |
+| **Developer**     | Metadata only             | **Once per 24 hours**     | Sprint feature dev, integration sandbox            |
+| **Developer Pro** | Metadata only             | **Once per 24 hours**     | Heavy integration testing                          |
+| **Partial Copy**  | Metadata + sample data    | **Once every 5 days**     | QA testing with realistic data templates           |
+| **Full Sandbox**  | Metadata + ALL prod data  | **Once every 29 days**    | Final UAT, staging, performance testing            |
+| **Scratch Org**   | Blank (populated via Git) | **No cooldown** (Instant) | Ephemeral PR verification & automated CI pipelines |
+
+> 📌 **DevOps Rule of Thumb**: Because Full Sandboxes carry a 29-day cooldown lockout, refreshes must be scheduled weeks in advance around release cutovers. For daily automated CI/CD builds, always use disposable scratch orgs.
+
 ---
 
 ## 9. Testing, Debugging & Quality Gates
