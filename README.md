@@ -501,6 +501,11 @@ Ordinary log lines only print text strings. A checkpoint captures local/static v
 
 Salesforce DX CLI includes dedicated commands for working with **Salesforce data (records)** as opposed to metadata:
 
+| Command Family                     | API Used        | What it talks to                                                                        | Analogy                                |
+| :--------------------------------- | :-------------- | :-------------------------------------------------------------------------------------- | :------------------------------------- |
+| **`sf project deploy / retrieve`** | Metadata API    | The **Application Code & Schema** (Apex classes, LWC, table definitions, triggers, XML) | `git push`, Docker build, Terraform    |
+| **`sf data *`**                    | REST / Bulk API | The **Database Rows** (Customer names, phone numbers, billing transactions)             | `psql`, `mysql`, database seed scripts |
+
 ### 1) Query Records with SOQL
 
 ```bash
