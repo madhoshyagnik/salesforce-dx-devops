@@ -479,6 +479,12 @@ Apex Replay Debugger replays execution post-mortem from a recorded debug log. It
 
 Ordinary log lines only print text strings. A checkpoint captures local/static variables and **trigger context variables** (e.g., `Trigger.new`, `Trigger.oldMap`) in a heap dump snapshot that is otherwise invisible in plain log text.
 
+| Concept                  | Where does it live?                                               | Visible in Salesforce Cloud Setup?                    |
+| :----------------------- | :---------------------------------------------------------------- | :---------------------------------------------------- |
+| **Breakpoint**           | **VS Code only** (on your laptop)                                 | ❌ No                                                 |
+| **Debug Log**            | Both (recorded in Cloud, downloaded to `.sfdx/tools/debug/logs/`) | ✅ Yes (**Setup > Environments > Logs > Debug Logs**) |
+| **Checkpoint Heap Dump** | Both (captured on Salesforce server, parsed by VS Code)           | ✅ Yes (as `HEAP_DUMP` in the log)                    |
+
 #### Troubleshooting Replay Debugger
 
 | Problem                   | Cause / Solution                                                                                                                     |
